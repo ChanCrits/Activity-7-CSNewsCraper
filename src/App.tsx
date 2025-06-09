@@ -18,12 +18,9 @@ import {
   Chip,
   Paper,
   CardMedia,
-  CardActions,
-  SelectChangeEvent
+  CardActions
 } from '@mui/material';
 import axios from 'axios';
-import PersonIcon from '@mui/icons-material/Person';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import LinkIcon from '@mui/icons-material/Link';
 import logo from './assets/logo.png';
 import IconButton from '@mui/material/IconButton';
@@ -32,7 +29,9 @@ import GitHubIcon from '@mui/icons-material/GitHub';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import LanguageIcon from '@mui/icons-material/Language';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? '/.netlify/functions' 
+  : 'http://localhost:5000/api';
 
 interface NewsItem {
   title: string;
