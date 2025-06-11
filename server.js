@@ -34,6 +34,8 @@ app.post('/api/scrape', async (req, res) => {
 
   console.log('Scraping URL:', url);
 
+  
+
   try {
     // Validate URL
     try {
@@ -422,6 +424,146 @@ app.post('/api/scrape', async (req, res) => {
     res.json({ news: newsItems });
   } catch (error) {
     console.error('Error scraping:', error);
+    
+    if (error.response) {
+      res.status(error.response.status).json({ 
+        error: `Server responded with status ${error.response.status}` 
+      });
+    } else if (error.request) {
+      res.status(500).json({ 
+        error: 'No response received from the website. Please check the URL and try again.' 
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'Error setting up the request. Please try again.' 
+      });
+    }
+  }
+});
+
+// Add this new endpoint after the existing /api/scrape endpoint
+app.post('/api/scrape-article', async (req, res) => {
+  console.log('Scrape article endpoint hit');
+  const { url } = req.body;
+  
+  if (!url) {
+    console.log('No URL provided');
+    return res.status(400).json({ error: 'URL is required' });
+  }
+
+  try {
+    // Validate URL
+    try {
+      new URL(url);
+    } catch (e) {
+      console.log('Invalid URL format:', url);
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Add headers to mimic a browser request
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.5',
+      'Connection': 'keep-alive',
+      'Upgrade-Insecure-Requests': '1',
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+
+    const response = await axios.get(url, { 
+      headers,
+      timeout: 10000,
+      validateStatus: function (status) {
+        return status >= 200 && status < 500;
+      }
+    });
+
+    if (response.status === 403) {
+      return res.status(403).json({ 
+        error: 'Access to this website is forbidden. The website might be blocking scraping attempts.' 
+      });
+    }
+
+    if (response.status !== 200) {
+      return res.status(response.status).json({ 
+        error: `Failed to fetch the article. Status code: ${response.status}` 
+      });
+    }
+
+    const $ = cheerio.load(response.data);
+    
+    // Common selectors for article content
+    const contentSelectors = [
+      'article .content',
+      'article .article-content',
+      'article .post-content',
+      'article .entry-content',
+      'article .story-content',
+      'article .news-content',
+      'article .main-content',
+      '.article .content',
+      '.post .content',
+      '.story .content',
+      '.news .content',
+      'article p',
+      '.article p',
+      '.post p',
+      '.story p',
+      '.news p'
+    ];
+
+    let content = '';
+    let foundContent = false;
+
+    // Try each selector until we find content
+    for (const selector of contentSelectors) {
+      const elements = $(selector);
+      if (elements.length > 0) {
+        content = elements.text().trim();
+        if (content) {
+          foundContent = true;
+          break;
+        }
+      }
+    }
+
+    // If no content found with selectors, try to get all paragraphs
+    if (!foundContent) {
+      content = $('p').map((_, el) => $(el).text().trim()).get().join('\n\n');
+    }
+
+    // Get article metadata
+    const title = $('h1').first().text().trim() || 
+                 $('meta[property="og:title"]').attr('content') || 
+                 $('title').text().trim();
+
+    const author = $('meta[name="author"]').attr('content') || 
+                  $('.author').first().text().trim() || 
+                  $('.byline').first().text().trim() || 
+                  'Unknown Author';
+
+    const date = $('meta[property="article:published_time"]').attr('content') || 
+                $('.date').first().text().trim() || 
+                $('.published').first().text().trim() || 
+                'No date available';
+
+    const imageUrl = $('meta[property="og:image"]').attr('content') || 
+                    $('.featured-image img').first().attr('src') || 
+                    $('.article-image img').first().attr('src') || 
+                    null;
+
+    res.json({
+      title,
+      author,
+      date,
+      content,
+      imageUrl,
+      source: new URL(url).hostname
+    });
+
+  } catch (error) {
+    console.error('Error scraping article:', error);
     
     if (error.response) {
       res.status(error.response.status).json({ 

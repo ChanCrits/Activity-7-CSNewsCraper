@@ -28,6 +28,8 @@ import Tooltip from '@mui/material/Tooltip';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import LanguageIcon from '@mui/icons-material/Language';
+import Footer from './components/Footer';
+import ArticleView from './components/ArticleView';
 
 const API_BASE_URL = process.env.NODE_ENV === 'production' 
   ? '/.netlify/functions' 
@@ -78,7 +80,16 @@ function App() {
   const [filterKeyword, setFilterKeyword] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'title'>('date');
   const [error, setError] = useState<string>('');
-  const [serverStatus, setServerStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [selectedArticle, setSelectedArticle] = useState<{
+    title: string;
+    author: string;
+    date: string;
+    content: string;
+    imageUrl: string | null;
+    source: string;
+  } | null>(null);
+  const [articleLoading, setArticleLoading] = useState(false);
+  const [articleError, setArticleError] = useState<string | null>(null);
 
   const newsUrls = [
     {
@@ -112,24 +123,6 @@ function App() {
       description: 'Latest news and updates'
     }
   ];
-
-  useEffect(() => {
-    // Check if server is running
-    const checkServer = async () => {
-      try {
-        console.log('Checking server status...');
-        const response = await axios.get(`${API_BASE_URL}/test`);
-        console.log('Server response:', response.data);
-        setServerStatus('online');
-      } catch (error) {
-        console.error('Server check failed:', error);
-        setServerStatus('offline');
-        setError('Server is offline. Please make sure the server is running on port 5000.');
-      }
-    };
-
-    checkServer();
-  }, []);
 
   const scrapeNews = async () => {
     if (!url) {
@@ -168,6 +161,31 @@ function App() {
     }
   };
 
+  const handleArticleClick = async (url: string) => {
+    setSelectedArticle(null);
+    setArticleLoading(true);
+    setArticleError(null);
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/scrape-article`, { url });
+      setSelectedArticle(response.data);
+    } catch (error) {
+      console.error('Error fetching article:', error);
+      const apiError = error as ApiError;
+      setArticleError(
+        apiError.response?.data?.error || 
+        'Failed to fetch article content. Please try again.'
+      );
+    } finally {
+      setArticleLoading(false);
+    }
+  };
+
+  const handleCloseArticle = () => {
+    setSelectedArticle(null);
+    setArticleError(null);
+  };
+
   const filteredAndSortedNews = news
     .filter(item => 
       filterKeyword === '' || 
@@ -185,7 +203,9 @@ function App() {
     <Box sx={{ 
       bgcolor: theme.background,
       minHeight: '100vh',
-      color: theme.text.primary
+      color: theme.text.primary,
+      display: 'flex',
+      flexDirection: 'column'
     }}>
       <Container 
         maxWidth={false} 
@@ -193,8 +213,8 @@ function App() {
           py: 4,
           px: { xs: 2, sm: 3 },
           maxWidth: '100% !important',
-          height: '100vh',
-          overflow: 'hidden'
+          flex: 1,
+          overflow: 'auto'
         }}
       >
         <Box sx={{ 
@@ -234,23 +254,6 @@ function App() {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {serverStatus === 'online' && (
-              <Chip 
-                label="Server Online" 
-                color="success" 
-                size="small"
-                sx={{ 
-                  height: '24px',
-                  bgcolor: 'rgba(76, 175, 80, 0.1)',
-                  color: '#4caf50',
-                  border: '1px solid rgba(76, 175, 80, 0.3)',
-                  '& .MuiChip-label': {
-                    px: 1
-                  }
-                }}
-              />
-            )}
-            {/* Social Icons */}
             <Tooltip title="GitHub">
               <IconButton
                 component="a"
@@ -286,18 +289,6 @@ function App() {
             </Tooltip>
           </Box>
         </Box>
-
-        {serverStatus === 'checking' && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', my: 4 }}>
-            <CircularProgress sx={{ color: theme.primary }} />
-          </Box>
-        )}
-
-        {serverStatus === 'offline' && (
-          <Alert severity="error" sx={{ mb: 4 }}>
-            Server is offline. Please make sure the server is running on port 5000.
-          </Alert>
-        )}
 
         <Box sx={{ 
           display: 'flex', 
@@ -619,18 +610,15 @@ function App() {
                           {item.date}
                         </Typography>
                       </CardContent>
-                      <CardActions sx={{ p: { xs: 1.5, sm: 2 } }}>
-                        <Button 
-                          size="small" 
-                          startIcon={<LinkIcon />}
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                      <CardActions>
+                        <Button
+                          size="small"
+                          color="primary"
+                          onClick={() => handleArticleClick(item.url)}
                           sx={{ 
                             color: theme.primary,
                             '&:hover': {
-                              bgcolor: 'transparent',
-                              opacity: 0.8
+                              bgcolor: 'rgba(144, 202, 249, 0.1)'
                             }
                           }}
                         >
@@ -655,6 +643,14 @@ function App() {
           </Alert>
         </Snackbar>
       </Container>
+      <Footer />
+      <ArticleView
+        open={selectedArticle !== null}
+        onClose={handleCloseArticle}
+        article={selectedArticle}
+        loading={articleLoading}
+        error={articleError}
+      />
     </Box>
   );
 }
